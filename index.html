@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Synology JSON to Docker Compose</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 0 20px; line-height: 1.6; background: #f4f4f9; }
+        textarea { width: 100%; height: 200px; margin-bottom: 10px; font-family: monospace; border: 1px solid #ccc; border-radius: 4px; padding: 10px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        h2 { color: #333; }
+        .output-container { position: relative; }
+        #output { background: #282c34; color: #abb2bf; height: 300px; }
+    </style>
+</head>
+<body>
+    <h2>Synology DiskStation Docker JSON Converter</h2>
+    <p>Paste your exported Synology .json content below:</p>
+    <textarea id="jsonInput" placeholder='{"cap_add": [], "container_post_data": {...}}'></textarea>
+    <button onclick="convert()">Convert to Compose</button>
+
+    <h2>Docker Compose Output</h2>
+    <div class="output-container">
+        <textarea id="output" readonly></textarea>
+    </div>
+
+    <script>
+        function convert() {
+            const input = document.getElementById('jsonInput').value;
+            try {
+                const data = JSON.parse(input);
+                const postData = data.container_post_data || data;
+
+                const compose = {
+                    version: '3.9',
+                    services: {}
+                };
+
+                const serviceName = postData.name || 'synology_service';
+
+                compose.services[serviceName] = {
+                    image: postData.image,
+                    container_name: postData.name,
+                    restart: postData.restart_policy === 'always' ? 'always' : 'unless-stopped',
+                };
+
+                // Ports
+                if (postData.port_bindings) {
+                    compose.services[serviceName].ports = postData.port_bindings.map(p => 
+                        `${p.host_port}:${p.container_port}/${p.protocol}`
+                    );
+                }
+
+                // Environment Variables
+                if (postData.env_variables) {
+                    const envs = {};
+                    postData.env_variables.forEach(e => {
+                        envs[e.key] = e.value;
+                    });
+                    compose.services[serviceName].environment = envs;
+                }
+
+                // Volumes
+                if (postData.volume_bindings) {
+                    compose.services[serviceName].volumes = postData.volume_bindings.map(v => 
+                        `${v.host_volume_file}:${v.mount_point}:${v.read_only ? 'ro' : 'rw'}`
+                    );
+                }
+
+                // Privileged
+                if (postData.is_privileged) {
+                    compose.services[serviceName].privileged = true;
+                }
+
+                document.getElementById('output').value = jsyaml.dump(compose);
+            } catch (e) {
+                alert("Invalid JSON: " + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
