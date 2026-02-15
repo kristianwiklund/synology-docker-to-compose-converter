@@ -73,7 +73,24 @@
                     compose.services[serviceName].privileged = true;
                 }
 
-                document.getElementById('output').value = jsyaml.dump(compose);
+                // Dump YAML normally, then quote only scalars that contain ':'
+                let yaml = jsyaml.dump(compose);
+
+                // Quote list items (lines starting with '-') that contain a ':'
+                yaml = yaml.replace(/^(\s*-\s*)([^"'\n][^\n]*:[^\n]*)$/gm, function(_, prefix, val) {
+                    const v = val.trim();
+                    if (/^["']/.test(v)) return prefix + v;
+                    return prefix + JSON.stringify(v);
+                });
+
+                // Quote mapping values (e.g. KEY: value) where the value contains a ':'
+                yaml = yaml.replace(/^(\s*[^:\n]+:\s*)([^"'\n][^\n]*:[^\n]*)$/gm, function(_, prefix, val) {
+                    const v = val.trim();
+                    if (/^["']/.test(v)) return prefix + v;
+                    return prefix + JSON.stringify(v);
+                });
+
+                document.getElementById('output').value = yaml;
             } catch (e) {
                 alert("Invalid JSON: " + e.message);
             }
